@@ -1,0 +1,286 @@
+#!/bin/bash
+# Mark Piccirilli
+# CS344
+# 10/8/2018
+# Description: This bash script provides functions for finding the dimensions of a matix, transposing a matrix, finding the mean of a matrix
+# and adding and multiplying two matricies
+
+# Dims function
+# finds the dimensions of a matrix
+dims() {
+    #error checking
+    if test $# -gt 1
+    then
+	echo "too many arguments" 1>&2
+	exit 1
+    fi
+    if !(test -r $1)
+    then
+	echo "cant read file" 1>&2
+	exit 1
+    fi
+    #set datafilepath depending on weather or not there is an argument
+    datafilepath="datafilepath$$"
+    if test $# -eq 0
+    then
+	cat > "$datafilepath" #the file is being piped through stdin
+    elif test $# -eq 1
+    then
+	datafilepath=$1  #the file is provided in the arguments
+    fi
+    rows=0
+    while read rowIn 
+    do
+	columns=0
+	for i in $rowIn
+	do
+	    ((columns++)) #for each element in the first row increment the columns variable
+	done
+	((rows++)) #increment the rows variable for each row read
+    done < $datafilepath
+    echo "$rows $columns"
+}
+
+#transpose function
+#transposes a matrix
+transpose() {
+    #error checking
+    if test $# -gt 1  #if arguments are grater than 1
+    then
+	echo "too many arguments" 1>&2
+	exit 1
+    fi
+    if !(test -r $1) #test to see if the file is readable
+    then
+	echo "cant read file" 1>&2
+	exit 1
+    fi
+    count=1
+    num=1
+    row=0
+    while read rowIn
+    do
+	((row++))
+	col=0
+	echo "$rowIn" > tempfile$num #create a uniquely named tempfile for each row
+	((num++))
+	for i in $rowIn
+	do
+	    ((col++))  #keep track of rows and columns to print new matrix
+	done
+    done < $1
+    # print matrix in new format
+    for i in `seq 1 $col`
+    do
+	for i in `seq 1 $row`
+	do
+	    if test $i -ne $row
+	    then
+		cut -f $count tempfile$i > temp$i
+		read varA < temp$i
+		printf -- "$varA\t"
+	    else
+		cut -f $count tempfile$i > temp$i
+		read varA < temp$i
+		printf -- "$varA"
+	    fi
+	done
+	echo ""
+	((count++))
+    done
+}
+
+
+mean() {
+    #error checking
+    if test $# -gt 1
+    then
+	echo "too many arguments" 1>&2
+	exit 1
+    fi
+    if !(test -r $1)
+    then
+	echo "cant read file" 1>&2
+	exit 1
+    fi
+    #cat $1 > tempMean
+    read rowIn <$1
+    #echo $rowIn
+    rm -f temp* #delete temporary files
+    count=1
+    #store each column in its own tempfile
+    for i in $rowIn
+    do
+	cut -f $count $1 >> temp$count
+	((count++))
+    done
+    a=1 #counter for while loop
+    sum=0 #variable to keep track of sum
+    for i in $rowIn
+    do
+	row=0 #number of rows for mean calculation, must be reset before last while calculation
+	while read data
+	do
+	    ((row++))
+	    sum=$(expr $sum + $data)
+	done <temp$a
+	echo "$sum" >> tempSum
+	sum=0 #reset sum for next loop
+	((a++))
+    done
+    b=2 #variable to test for the last data. starts at 2 because a is incremented after its last iteration
+    while read sumNum
+    do
+	#((columns = $a - 1))
+	((mean = ($sumNum + ($row/2)*(($sumNum>0)*2-1 )) / $row))
+	echo $mean >> tempMean
+    done < tempSum
+    while read printNum 
+    do
+	if test $a -ne $b
+	then
+	    printf -- "$printNum\t"
+	else
+	    printf -- "$printNum"
+	fi
+	((b++))
+    done < tempMean
+    echo ""
+}
+
+add() {
+    #error checking
+    errCount=0
+    while read var
+    do
+	((errCount++))
+    done <$1
+    while read var
+    do
+	((errCount--))
+    done<$2
+    if test $errCount -ne 0
+    then
+	echo "mismatched matricies" 1>&2
+	exit 1
+    fi
+    sum=0
+    elements=0 #count elements to know when to not print tab at the end
+    rm -f temp*
+    while read rowIn1<&3 && read rowIn2<&4
+    do
+	a=0
+	for i in $rowIn1
+	do
+	((a++))
+	    b=0 #a and b are counters for the for loops.  They determine if numbers should be added
+	    for j in $rowIn2
+	    do
+	    ((b++))
+		if test $a -eq $b  #test if the numbers are in the same position
+		then
+		    sum=$(($i + $j))
+		    echo "$sum" >> tempSum
+		    ((elements++))
+		fi
+	    done
+	done
+    done 3<$1 4<$2 #use file descriptors to read two files at once
+    #error checking
+    if test $a -ne $b #test columns
+    then
+	echo "mismatched matricies" 1>&2
+	exit 1
+    fi
+    #print out the matrix
+    count=0 #counter to find last number
+    countRow=0 #counter to find the end of the row
+    #((b--)) #b is column counter from for loop
+    while read printNum
+    do
+	((count++))
+	((countRow++))
+	if test $count -ne $elements #if not on last element
+	then
+	    if test $countRow -ne  $b # if not at end of row
+	    then
+		printf -- "$printNum\t"
+	    else
+		printf -- "$printNum"
+		echo ""
+		countRow=0 #reset countRow
+	    fi
+	else
+	    printf -- "$printNum"
+	    echo ""
+	fi
+    done <tempSum
+}
+
+
+multiply() {
+    rm -f temp*
+    row=0
+    while read rowM1
+    do
+	((row++))
+	read rowM2 < $2
+	count=0
+	for k in $rowM2 #for each column
+	do
+	    ((count++))
+	    cut -f $count $2 > tempColumn
+	    dotProduct=0 #intialize dot product
+	    a=0 #conter for the first for loop
+	    for i in $rowM1
+	    do
+		((a++))
+		b=0 #counter for the while loop
+		while read j  #interate through file that was cut out of matrix
+		do
+		    ((b++))
+		    if test $a -eq $b  #if numbers should be multiplied do it
+		    then
+			product=$(($i * $j))
+			dotProduct=$(($product + $dotProduct))
+		    fi
+		done <tempColumn #tempColumn was cut out of matrix
+	    done
+	    echo $dotProduct >> tempMatrix #tempMatrix holds final values
+	done
+    done < $1
+    #error checking
+    if test $a -ne $b
+    then
+	echo "mismatched matricies" 1>&2
+	exit 1
+    fi
+    printCountEnd=0
+    printCountRow=0
+    #variable count provides the number of columns in the second matrix and thus the number of columns in the answer matrix
+    #variable row provides the number of rows in the first matrix and thus the number of rows in the answer matrix
+    finalElements=$(($count * $row))  #number of elements in final matrix
+    while read printNum
+    do
+	((printCountEnd++))
+	((printCountRow++))
+	if test $printCountEnd -ne $finalElements && test $printCountRow -ne $count
+	then
+	    printf -- "$printNum\t"
+	else
+	    printf -- "$printNum"
+	    echo ""
+	    printCountRow=0
+	fi
+    done < tempMatrix
+}
+
+trap "rm -f temp*; rm -f datafilepath*; echo 'program interupted'; exit 1" INT HUP TERM
+if $1 "${@:2}"
+then
+    rm -f temp* #remove temp files
+    rm -f datafilepath* #remove and created datafilepath
+else
+    echo "bad command" 1>&2
+    exit 1
+fi
